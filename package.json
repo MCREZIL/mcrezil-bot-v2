@@ -1,11 +1,18 @@
 {
   "name": "mcrezil-multi-bot",
   "version": "2.0.0",
+  "description": "MCREZIL MULTI BOT - Key 22669988 + 1-10 Menu + ViewOnce + AntiDelete + Group Admin + getpp",
   "main": "bot.js",
-  "scripts": { "start": "node bot.js" },
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.8",
     "express": "^4.18.2",
     "pino": "^8.17.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
