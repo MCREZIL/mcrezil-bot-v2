@@ -1,8 +1,8 @@
 {
   "name": "mcrezil-multi-bot",
   "version": "2.0.0",
-  "main": "index.js",
-  "scripts": { "start": "node index.js" },
+  "main": "bot.js",
+  "scripts": { "start": "node bot.js" },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.8",
     "express": "^4.18.2",
