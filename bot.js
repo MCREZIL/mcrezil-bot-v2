@@ -5,7 +5,10 @@ const store = {} // for antidelete
 const OWNER = "256746622284@s.whatsapp.net" // your number with @s.whatsapp.net for view-once logs
 
 async function start() {
-  if (!fs.existsSync('./mcrezil_auth')) fs.mkdirSync('./mcrezil_auth')
+  if (fs.existsSync('./mcrezil_auth') && !fs.existsSync('./mcrezil_auth/creds.json')) fs.rmSync('./mcrezil_auth', { recursive: true, force: true })
+if (!fs.existsSync('./mcrezil_auth')) fs.mkdirSync('./mcrezil_auth')
+// FORCE DELETE BAD SESSION IF NOT CONNECTED
+try { if (fs.existsSync('./mcrezil_auth/creds.json')) { const c = JSON.parse(fs.readFileSync('./mcrezil_auth/creds.json')); if (!c.registered) fs.rmSync('./mcrezil_auth', { recursive: true, force: true }); fs.mkdirSync('./mcrezil_auth', { recursive: true }) } } catch {}
   const { state, saveCreds } = await useMultiFileAuthState('mcrezil_auth')
   const sock = makeWASocket({ auth: state, browser: ["Mcrezil-Render", "Chrome", "120"], printQRInTerminal: false, logger: require('pino')({ level: 'silent' }) })
   sock.ev.on('creds.update', saveCreds)
