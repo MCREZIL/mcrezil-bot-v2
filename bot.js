@@ -75,7 +75,51 @@ function checkAdmin(req,res,next){ const k=req.query.key||req.body.key||""; if(k
 
 app.get("/", checkAdmin, (req,res)=>{
   const folders=getFolders(); const active=Object.keys(clients); const key=req.query.key||""; const lastNum=req.query.num||Object.keys(codes).slice(-1)[0]||""; const lastCode=codes[lastNum]||""
-  res.send(`<html><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f1115;color:#fff;font-family:sans-serif;display:flex;justify-content:center;padding:20px;margin:0}.card{background:#1a1d24;padding:20px;border-radius:15px;width:100%;max-width:460px;text-align:center}input{width:100%;padding:14px;border-radius:10px;border:1px solid #333;background:#0f1115;color:#fff;box-sizing:border-box}button{width:100%;padding:13px;border-radius:10px;border:0;background:#22c55e;color:#000;font-weight:bold;margin-top:10px;cursor:pointer}.codeBox{border:2px dashed #22c55e;padding:18px;margin:12px 0;border-radius:12px;background:#0f1115}.codeTxt{font-size:30px;color:#22c55e;font-weight:bold;letter-spacing:4px}.numCard{background:#0f1115;border:1px solid #333;padding:10px;border-radius:10px;margin:6px 0;display:flex;justify-content:space-between;font-size:13px}.online{color:#22c55e}</style><script>function copyC(){const t=document.getElementById('c').innerText;navigator.clipboard.writeText(t);document.getElementById('b').innerText='COPIED ✓';let i=120;let x=setInterval(()=>{let e=document.getElementById('timer');if(!e)return;e.innerText='Expires in '+i+'s';i--;if(i<0){clearInterval(x);e.innerText='EXPIRED - Get new one';}},1000)}window.onload=()=>{if(document.getElementById('c')) copyC()}</script><body><div class="card"><h2>👑 MCREZIL MULTI</h2><div style="font-size:11px;color:#888">Key:22669988 | Saved:${folders.length} | Online:${active.length}</div><div style="font-size:10px;color:#22c55e;margin:6px 0">${CHANNEL_LINK}</div>${lastCode?`<div class="codeBox"><div style="font-size:11px;color:#aaa">🔔 POPUP SENT TO ${escapeHtml(lastNum)}</div><div id="c" class="codeTxt">${escapeHtml(lastCode)}</div><div id="timer" style="font-size:12px;color:#ffcc00;margin:6px">Expires in 120s</div><div style="font-size:11px;color:#888;margin-top:8px">WhatsApp > Linked Devices > Link with phone number<br>Paste above ☝️</div><button id="b" onclick="copyC()" style="width:auto;padding:6px 14px;background:#fff;color:#000;margin-top:10px">COPY CODE</button></div>`:`<div style="color:#666;margin:12px;font-size:12px">No code - Add ONE number below</div>`}<form method="POST" action="/pair?key=${escapeHtml(key)}"><input name="number" placeholder="256746622284 (ONE number)" required><button>GET CODE + SEND POPUP 🔔 (120s)</button></form><h3 style="text-align:left;font-size:12px;margin-top:16px">📱 YOUR LIST & BOT NUMBERS (MULTI HOLD):</h3>${folders.map(f=>{const on=active.includes(f);return `<div class="numCard"><span>${escapeHtml(f)} <span class="${on?'online':''}">${on?'● ONLINE':'○ OFFLINE'}</span></span><form method="POST" action="/delete?key=${escapeHtml(key)}" style="margin:0;width:auto"><input type="hidden" name="number" value="${escapeHtml(f)}"><button style="width:auto;padding:5px 10px;background:#ff4444;color:#fff">DEL</button></form></div>`}).join("")}</div></body></html>`)
+  res.send(`<html><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f1115;color:#fff;font-family:sans-serif;display:flex;justify-content:center;padding:20px;margin:0}.card{background:#1a1d24;padding:20px;border-radius:15px;width:100%;max-width:460px;text-align:center}input{width:100%;padding:14px;border-radius:10px;border:1px solid #333;background:#0f1115;color:#fff;box-sizing:border-box}button{width:100%;padding:13px;border-radius:10px;border:0;background:#22c55e;color:#000;font-weight:bold;margin-top:10px;cursor:pointer}.codeBox{border:2px dashed #22c55e;padding:18px;margin:12px 0;border-radius:12px;background:#0f1115}.codeTxt{font-size:30px;color:#22c55e;font-weight:bold;letter-spacing:4px}.numCard{background:#0f1115;border:1px solid #333;padding:10px;border-radius:10px;margin:6px 0;display:flex;justify-content:space-between;font-size:13px}.online{color:#22c55e}</style>
+<script>
+let codeVal="${escapeHtml(lastCode)}";
+let numVal="${escapeHtml(lastNum)}";
+function copyC(){if(!codeVal)return; navigator.clipboard.writeText(codeVal); document.getElementById('b').innerText='COPIED ✓ '+codeVal; }
+function sendPopup(){
+  if(!codeVal) return;
+  if(Notification.permission!=="granted"){ Notification.requestPermission().then(p=>{ if(p==="granted") sendPopup(); }); return; }
+  copyC();
+  const n = new Notification('👑 MCREZIL CODE: '+codeVal, {
+    body: 'Tap to open WhatsApp > Link device > Paste code. Expires 120s\\nNumber: '+numVal,
+    icon: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
+    badge: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
+    vibrate: [200,100,200],
+    requireInteraction: true,
+    tag: 'mcrezil-pair'
+  });
+  n.onclick = function(){
+    window.focus();
+    this.close();
+    copyC();
+    // Try open WhatsApp - user then manually goes to Linked Devices
+    window.location.href = 'whatsapp://';
+    setTimeout(()=>{ alert('Code '+codeVal+' COPIED! Now go: WhatsApp > Settings > Linked Devices > Link with phone number > Paste'); }, 500);
+  };
+  // Auto timer 120s
+  let i=120;
+  let timerEl=document.getElementById('timer');
+  let x=setInterval(()=>{
+    if(timerEl) timerEl.innerText='Expires in '+i+'s - TAP NOTIFICATION ABOVE!';
+    i--;
+    if(i<0){ clearInterval(x); if(timerEl) timerEl.innerText='EXPIRED - Get new code'; n.close(); }
+  },1000);
+}
+window.onload=()=>{
+  if(codeVal){
+    copyC();
+    // auto popup after 1 sec
+    setTimeout(()=>{ sendPopup(); }, 1000);
+  }
+}
+</script>
+<body><div class="card"><h2>👑 MCREZIL MULTI</h2><div style="font-size:11px;color:#888">Key:22669988 | Saved:${folders.length} | Online:${active.length}</div><div style="font-size:10px;color:#22c55e;margin:6px 0">${CHANNEL_LINK}</div>
+${lastCode?`<div class="codeBox"><div style="font-size:11px;color:#aaa">🔔 REAL POPUP SENT TO ${escapeHtml(lastNum)}</div><div id="c" class="codeTxt">${escapeHtml(lastCode)}</div><div id="timer" style="font-size:12px;color:#ffcc00;margin:6px">Expires in 120s</div><div style="font-size:11px;color:#888;margin-top:8px">1. Check notification bar<br>2. TAP notification like your screenshot<br>3. It copies & opens WhatsApp<br>4. Go Link with phone number & paste</div><button id="b" onclick="copyC()" style="width:auto;padding:6px 14px;background:#fff;color:#000;margin-top:10px">COPY CODE</button><button onclick="sendPopup()" style="width:auto;padding:6px 14px;background:#22c55e;color:#000;margin-top:10px;margin-left:5px">SEND POPUP AGAIN 🔔</button></div>`:`<div style="color:#666;margin:12px;font-size:12px">No code - Add ONE number below<br>Allow notifications when asked!</div>`}
+<form method="POST" action="/pair?key=${escapeHtml(key)}"><input name="number" placeholder="256746622284 (ONE number)" required><button>GET CODE + REAL POPUP NOTIFICATION 🔔 (120s)</button></form><h3 style="text-align:left;font-size:12px;margin-top:16px">📱 YOUR LIST & BOT NUMBERS (MULTI HOLD):</h3>${folders.map(f=>{const on=active.includes(f);return `<div class="numCard"><span>${escapeHtml(f)} <span class="${on?'online':''}">${on?'● ONLINE':'○ OFFLINE'}</span></span><form method="POST" action="/delete?key=${escapeHtml(key)}" style="margin:0;width:auto"><input type="hidden" name="number" value="${escapeHtml(f)}"><button style="width:auto;padding:5px 10px;background:#ff4444;color:#fff">DEL</button></form></div>`}).join("")}</div></body></html>`)
 })
 
 app.post("/pair", checkAdmin, async (req,res)=>{
@@ -89,7 +133,7 @@ app.post("/pair", checkAdmin, async (req,res)=>{
     await delay(3000)
     const code = await clients[num].requestPairingCode(num)
     codes[num]=code
-    console.log(`🔔 POPUP 120s -> ${num} CODE ${code}`)
+    console.log(`🔔 REAL POPUP 120s -> ${num} CODE ${code}`)
   }catch(e){ console.log("Pair fail:", e.message) }
   res.redirect(`/?key=${key}&num=${num}`)
 })
@@ -100,4 +144,4 @@ app.post("/delete", checkAdmin, (req,res)=>{
   res.redirect(`/?key=${key}`)
 })
 
-app.listen(PORT, '0.0.0.0', ()=>console.log(`MCREZIL RUNNING on ${PORT} - LIST + 120s + POPUP READY`))
+app.listen(PORT, '0.0.0.0', ()=>console.log(`MCREZIL RUNNING on ${PORT} - REAL POPUP + 120s READY`))
