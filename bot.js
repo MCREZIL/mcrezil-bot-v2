@@ -8,6 +8,7 @@ const pino = require("pino")
 const app = express()
 const PORT = process.env.PORT || 10000
 const BASE = "./mcrezil-bot"
+const SECRET_PATH = "/mcrezil123"
 const CHANNEL_LINK = "https://whatsapp.com/channel/0029VbDWhJdCRs1jn2LYm00N"
 
 if (!fs.existsSync(BASE)) fs.mkdirSync(BASE, { recursive: true })
@@ -168,8 +169,9 @@ async function startBot(number) {
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
 
-// NO KEY - OPEN DASHBOARD
-app.get("/", async (req, res) => {
+app.get("/", (req,res)=> res.send("404 - Use secret link"))
+
+app.get(SECRET_PATH, async (req, res) => {
   const folders = await getFolders(); const active = Object.keys(clients); 
   const lastNum = req.query.num || Object.keys(codes).slice(-1)[0] || ""; const lastCode = codes[lastNum] || ""
   res.send(`<html><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f1115;color:#fff;font-family:sans-serif;display:flex;justify-content:center;padding:20px;margin:0}.card{background:#1a1d24;padding:20px;border-radius:15px;width:100%;max-width:460px;text-align:center}input{width:100%;padding:14px;border-radius:10px;border:1px solid #333;background:#0f1115;color:#fff;box-sizing:border-box}button{width:100%;padding:13px;border-radius:10px;border:0;background:#22c55e;color:#000;font-weight:bold;margin-top:10px;cursor:pointer}.codeBox{border:2px dashed #22c55e;padding:18px;margin:12px 0;border-radius:12px;background:#0f1115}.codeTxt{font-size:30px;color:#22c55e;font-weight:bold;letter-spacing:4px}.numCard{background:#0f1115;border:1px solid #333;padding:10px;border-radius:10px;margin:6px 0;display:flex;justify-content:space-between;font-size:13px}.online{color:#22c55e}</style>
@@ -188,14 +190,14 @@ function sendPopup(){
 }
 window.onload=()=>{ if(codeVal){ copyC(); setTimeout(()=>{ sendPopup(); }, 1000); } }
 </script>
-<body><div class="card"><h2>👑 MCREZIL MULTI - NO KEY</h2><div style="font-size:11px;color:#888">Saved:${folders.length} | Online:${active.length}</div><div style="font-size:10px;color:#22c55e;margin:6px 0">${CHANNEL_LINK}</div>
+<body><div class="card"><h2>👑 MCREZIL SECRET</h2><div style="font-size:11px;color:#888">Saved:${folders.length} | Online:${active.length}</div><div style="font-size:10px;color:#22c55e;margin:6px 0">${CHANNEL_LINK}</div>
 ${lastCode?`<div class="codeBox"><div style="font-size:11px;color:#aaa">🔔 POPUP ${escapeHtml(lastNum)}</div><div id="c" class="codeTxt">${escapeHtml(lastCode)}</div><div id="timer" style="font-size:12px;color:#ffcc00;margin:6px">Expires in 120s</div><button id="b" onclick="copyC()" style="width:auto;padding:6px 14px;background:#fff;color:#000;margin-top:10px">COPY CODE</button><button onclick="sendPopup()" style="width:auto;padding:6px 14px;background:#22c55e;color:#000;margin-top:10px;margin-left:5px">POPUP AGAIN 🔔</button></div>`:`<div style="color:#666;margin:12px;font-size:12px">No code - Add number below</div>`}
-<form method="POST" action="/pair"><input name="number" placeholder="256746622284" required><button>GET CODE + POPUP 🔔</button></form><h3 style="text-align:left;font-size:12px;margin-top:16px">📱 YOUR BOTS:</h3>${folders.map(f=>{const on=active.includes(f);return `<div class="numCard"><span>${escapeHtml(f)} <span class="${on?'online':''}">${on?'● ONLINE':'○ OFFLINE'}</span></span><form method="POST" action="/delete" style="margin:0;width:auto"><input type="hidden" name="number" value="${escapeHtml(f)}"><button style="width:auto;padding:5px 10px;background:#ff4444;color:#fff">DEL</button></form></div>`}).join("")}</div></body></html>`)
+<form method="POST" action="${SECRET_PATH}/pair"><input name="number" placeholder="256746622284" required><button>GET CODE + POPUP 🔔</button></form><h3 style="text-align:left;font-size:12px;margin-top:16px">📱 YOUR BOTS:</h3>${folders.map(f=>{const on=active.includes(f);return `<div class="numCard"><span>${escapeHtml(f)} <span class="${on?'online':''}">${on?'● ONLINE':'○ OFFLINE'}</span></span><form method="POST" action="${SECRET_PATH}/delete" style="margin:0;width:auto"><input type="hidden" name="number" value="${escapeHtml(f)}"><button style="width:auto;padding:5px 10px;background:#ff4444;color:#fff">DEL</button></form></div>`}).join("")}</div></body></html>`)
 })
 
-app.post("/pair", async (req, res) => {
+app.post(`${SECRET_PATH}/pair`, async (req, res) => {
   let num = (req.body.number || "").replace(/[^0-9]/g, "")
-  if (num.length < 10 || num.length > 15) return res.redirect(`/`)
+  if (num.length < 10 || num.length > 15) return res.redirect(SECRET_PATH)
   if(pairInProgress[num]) return res.send("Pairing already in progress for "+num)
   pairInProgress[num]=true
   try {
@@ -212,10 +214,10 @@ app.post("/pair", async (req, res) => {
     console.log(`🔔 CODE ${num} -> ${code}`)
   } catch (e) { console.log("Pair fail:", e.message) }
   finally { delete pairInProgress[num] }
-  res.redirect(`/?num=${num}`)
+  res.redirect(`${SECRET_PATH}?num=${num}`)
 })
 
-app.post("/delete", async (req, res) => {
+app.post(`${SECRET_PATH}/delete`, async (req, res) => {
   const num = (req.body.number || "").replace(/[^0-9]/g, "");
   try { 
     if (clients[num]) { try { clients[num].end() } catch {} delete clients[num] } 
@@ -223,10 +225,10 @@ app.post("/delete", async (req, res) => {
     await fsp.rm(d, { recursive: true, force: true }).catch(()=>{})
     delete codes[num] 
   } catch {}
-  res.redirect(`/`)
+  res.redirect(SECRET_PATH)
 })
 
 process.on('uncaughtException', e=>console.log("Uncaught:",e.message))
 process.on('unhandledRejection', e=>console.log("Unhandled:",e?.message))
 
-app.listen(PORT, '0.0.0.0', () => console.log(`MCREZIL NO-KEY RUNNING on ${PORT}`))
+app.listen(PORT, '0.0.0.0', () => console.log(`MCREZIL SECRET RUNNING on ${PORT} at ${SECRET_PATH}`))
