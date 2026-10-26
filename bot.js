@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, delay } = require("@whiskeysockets/baileys")
+const { default: makeWASocket, useMultiFileAuthState, delay, jidNormalizedUser } = require("@whiskeysockets/baileys")
 const express = require("express")
 const fs = require("fs")
 const fsp = fs.promises
@@ -17,7 +17,7 @@ if (!fs.existsSync(BASE)) fs.mkdirSync(BASE, { recursive: true })
 
 let clients = {}, codes = {}, pairInProgress = {}
 
-// FIXED: Bounded Map cache, stores only text not media
+// Bounded Map cache, stores only text not media
 class BoundedCache {
   constructor(limit=500){ this.limit=limit; this.map=new Map() }
   set(k,v){
@@ -50,7 +50,7 @@ async function getFolders() {
   }catch{ return [] }
 }
 
-// FIXED: Proper timing-safe compare with hash (no length leak)
+// Timing-safe compare with hash (prevents length leaks)
 function secureCompare(a, b) {
   try {
     const hA = crypto.createHash('sha256').update(String(a)).digest()
@@ -90,12 +90,9 @@ async function startBot(number) {
 
   sock.ev.on("messages.upsert", async m => {
     for (const msg of m.messages) {
-      // FIXED: Don't auto-read status - ban risk
       if (msg.key.remoteJid === "status@broadcast") continue
-
       if (!msg.message || msg.key.fromMe) continue
 
-      // FIXED: Only cache small text, not whole media object
       msgCache.set(msg.key.id, {
         remoteJid: msg.key.remoteJid,
         text: msg.message.conversation || msg.message.extendedTextMessage?.text || "[Media]",
@@ -138,7 +135,11 @@ async function startBot(number) {
       if (isGroup) { 
         const meta = await sock.groupMetadata(from).catch(() => null); 
         if(!meta) continue
-        const admin = meta?.participants?.find(p => p.id === sock.user.id)?.admin; 
+        
+        // FIXED: Use jidNormalizedUser to accurately evaluate admin status
+        const botJid = jidNormalizedUser(sock.user.id)
+        const admin = meta?.participants?.find(p => jidNormalizedUser(p.id) === botJid)?.admin; 
+
         if (lower.startsWith(".add") && admin) { 
           const n = args[1]?.replace(/[^0-9]/g, ""); 
           if (n && n.length>=10) await sock.groupParticipantsUpdate(from, [n + "@s.whatsapp.net"], "add").catch(() => {}) 
@@ -181,9 +182,8 @@ async function startBot(number) {
 ;(async()=>{ for(const n of await getFolders()) await startBot(n) })()
 
 app.use(express.urlencoded({ extended: true }))
-app.use(express.json()) // FIXED
+app.use(express.json())
 
-// FIXED: Lock + rate limit
 function checkAdmin(req, res, next) { 
   const k = req.query.key || req.body.key || ""; 
   if (!secureCompare(k, ADMIN_KEY)) {
@@ -195,7 +195,6 @@ function checkAdmin(req, res, next) {
 app.get("/", checkAdmin, async (req, res) => {
   const folders = await getFolders(); const active = Object.keys(clients); 
   const key = req.query.key || ""; const lastNum = req.query.num || Object.keys(codes).slice(-1)[0] || ""; const lastCode = codes[lastNum] || ""
-  // FIXED: Use JSON.stringify for JS context
   res.send(`<html><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0f1115;color:#fff;font-family:sans-serif;display:flex;justify-content:center;padding:20px;margin:0}.card{background:#1a1d24;padding:20px;border-radius:15px;width:100%;max-width:460px;text-align:center}input{width:100%;padding:14px;border-radius:10px;border:1px solid #333;background:#0f1115;color:#fff;box-sizing:border-box}button{width:100%;padding:13px;border-radius:10px;border:0;background:#22c55e;color:#000;font-weight:bold;margin-top:10px;cursor:pointer}.codeBox{border:2px dashed #22c55e;padding:18px;margin:12px 0;border-radius:12px;background:#0f1115}.codeTxt{font-size:30px;color:#22c55e;font-weight:bold;letter-spacing:4px}.numCard{background:#0f1115;border:1px solid #333;padding:10px;border-radius:10px;margin:6px 0;display:flex;justify-content:space-between;font-size:13px}.online{color:#22c55e}</style>
 <script>
 let codeVal=${JSON.stringify(lastCode)};
@@ -259,7 +258,6 @@ app.post("/delete", checkAdmin, async (req, res) => {
   res.redirect(`/?key=${key}`)
 })
 
-// FIXED: Prevent crash
 process.on('uncaughtException', e=>console.log("Uncaught:",e.message))
 process.on('unhandledRejection', e=>console.log("Unhandled:",e?.message))
 
