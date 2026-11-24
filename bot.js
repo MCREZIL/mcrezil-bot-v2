@@ -24,6 +24,16 @@ const clients = new Map()
 const pairingCodes = new Map()
 const pairingInProgress = new Map()
 
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>'"]/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#039;",
+    "\"": "&quot;"
+  })[character])
+}
+
 function cleanNumber(value) {
   return typeof value === "string" ? value.replace(/[^0-9]/g, "") : ""
 }
@@ -106,6 +116,10 @@ async function startBot(number) {
   return sock
 }
 
+app.get("/health", (request, response) => {
+  response.status(200).json({ ok: true })
+})
+
 app.get("/", (request, response) => {
   response.redirect(SECRET_PATH)
 })
@@ -117,9 +131,9 @@ app.get(SECRET_PATH, async (request, response) => {
 
   const cards = folders.map(item => {
     const online = clients.has(item)
-    return `<div>${item} — ${online ? "ONLINE" : "OFFLINE"}
-      <form method="POST" action="${SECRET_PATH}/delete" style="display:inline">
-        <input type="hidden" name="number" value="${item}">
+    return `<div>${escapeHtml(item)} — ${online ? "ONLINE" : "OFFLINE"}
+      <form method="POST" action="${escapeHtml(SECRET_PATH)}/delete" style="display:inline">
+        <input type="hidden" name="number" value="${escapeHtml(item)}">
         <button type="submit">Delete</button>
       </form></div>`
   }).join("")
@@ -129,11 +143,11 @@ app.get(SECRET_PATH, async (request, response) => {
 <title>MCREZIL SECRET</title></head>
 <body style="font-family:system-ui;margin:30px">
 <h2>👑 MCREZIL SECRET</h2>
-<form method="POST" action="${SECRET_PATH}/pair">
+<form method="POST" action="${escapeHtml(SECRET_PATH)}/pair">
 <input name="number" inputmode="numeric" pattern="[0-9]{10,15}" placeholder="256746622284" required>
 <button type="submit">Get pairing code</button>
 </form>
-${code ? `<h3>Pairing code: ${code}</h3>` : ""}
+${code ? `<h3>Pairing code: ${escapeHtml(code)}</h3>` : ""}
 <h3>Saved bots</h3>${cards || "No saved bots"}
 </body></html>`)
 })
