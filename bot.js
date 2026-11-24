@@ -6,14 +6,15 @@ const pino = require("pino")
 const {
   default: makeWASocket,
   useMultiFileAuthState,
-  delay,
-  jidNormalizedUser
+  delay
 } = require("@whiskeysockets/baileys")
 
 const app = express()
 const PORT = Number(process.env.PORT) || 10000
 const BASE = path.resolve(process.env.BOT_DATA_DIR || "./mcrezil-bot")
 const SECRET_PATH = process.env.ADMIN_PATH || "/mcrezil123"
+const MAX_CONNECTED_BOTS = 10
+const MAX_CONNECTION_MS = 60 * 60 * 1000
 
 fs.mkdirSync(BASE, { recursive: true })
 app.disable("x-powered-by")
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true, limit: "32kb" }))
 app.use(express.json({ limit: "32kb" }))
 
 const clients = new Map()
+const connectionTimers = new Map()
 const pairingCodes = new Map()
 const pairingInProgress = new Map()
 
@@ -42,6 +44,27 @@ function isValidNumber(number) {
   return /^\d{10,15}$/.test(number)
 }
 
+function clearConnectionTimer(number) {
+  const timer = connectionTimers.get(number)
+  if (timer) clearTimeout(timer)
+  connectionTimers.delete(number)
+}
+
+async function expireBot(number, sock) {
+  if (clients.get(number) !== sock) return
+
+  console.log(`⏱️ ${number} reached its 60-minute connection limit; logging out`)
+  clearConnectionTimer(number)
+  clients.delete(number)
+  pairingCodes.delete(number)
+
+  try { await sock.logout() } catch {}
+  try { sock.end(new Error("60-minute connection limit reached")) } catch {}
+  await fsp.rm(path.join(BASE, number), { recursive: true, force: true }).catch(error => {
+    console.error(`Could not remove expired session for ${number}:`, error.message)
+  })
+}
+
 async function getFolders() {
   try {
     const entries = await fsp.readdir(BASE, { withFileTypes: true })
@@ -57,6 +80,9 @@ async function getFolders() {
 
 async function startBot(number) {
   if (!isValidNumber(number)) throw new Error("Invalid phone number")
+  if (!clients.has(number) && clients.size >= MAX_CONNECTED_BOTS) {
+    throw new Error(`Maximum of ${MAX_CONNECTED_BOTS} connected bots reached`)
+  }
 
   const dir = path.join(BASE, number)
   await fsp.mkdir(dir, { recursive: true })
@@ -73,17 +99,26 @@ async function startBot(number) {
 
   const previous = clients.get(number)
   if (previous && previous !== sock) {
+    clearConnectionTimer(number)
     try { previous.end(new Error("Replaced by a newer socket")) } catch {}
   }
   clients.set(number, sock)
   sock.ev.on("creds.update", saveCreds)
 
   sock.ev.on("connection.update", update => {
-    if (update.connection === "open") {
-      console.log(`✅ ${number} CONNECTED`)
+    if (update.connection === "open" && clients.get(number) === sock) {
+      console.log(`✅ ${number} CONNECTED; session expires after 60 minutes`)
+      clearConnectionTimer(number)
+      const timer = setTimeout(() => {
+        expireBot(number, sock).catch(error => console.error(`Expiry error for ${number}:`, error.message))
+      }, MAX_CONNECTION_MS)
+      timer.unref?.()
+      connectionTimers.set(number, timer)
     }
+
     if (update.connection === "close" && clients.get(number) === sock) {
       console.log(`❌ ${number} CLOSED`)
+      clearConnectionTimer(number)
       clients.delete(number)
       pairingCodes.delete(number)
       pairingInProgress.delete(number)
@@ -143,11 +178,14 @@ app.get(SECRET_PATH, async (request, response) => {
 <title>MCREZIL SECRET</title></head>
 <body style="font-family:system-ui;margin:30px">
 <h2>👑 MCREZIL SECRET</h2>
+<p>Up to ${MAX_CONNECTED_BOTS} bot sessions can connect at once. Each session is automatically logged out and removed 60 minutes after it connects.</p>
+<p>Pairing must be approved by the account owner using WhatsApp's own linked-device flow. Never share a pairing code with anyone.</p>
 <form method="POST" action="${escapeHtml(SECRET_PATH)}/pair">
 <input name="number" inputmode="numeric" pattern="[0-9]{10,15}" placeholder="256746622284" required>
 <button type="submit">Get pairing code</button>
 </form>
 ${code ? `<h3>Pairing code: ${escapeHtml(code)}</h3>` : ""}
+<h3>Connected: ${clients.size}/${MAX_CONNECTED_BOTS}</h3>
 <h3>Saved bots</h3>${cards || "No saved bots"}
 </body></html>`)
 })
@@ -156,9 +194,19 @@ app.post(`${SECRET_PATH}/pair`, async (request, response) => {
   const number = cleanNumber(request.body?.number)
   if (!isValidNumber(number)) return response.redirect(SECRET_PATH)
   if (pairingInProgress.get(number)) return response.redirect(`${SECRET_PATH}?num=${number}`)
+  if (!clients.has(number) && clients.size >= MAX_CONNECTED_BOTS) {
+    return response.status(429).send(`Maximum of ${MAX_CONNECTED_BOTS} bot sessions are already connected. Try again after a session disconnects.`)
+  }
 
   pairingInProgress.set(number, true)
   try {
+    const existing = clients.get(number)
+    if (existing) {
+      clearConnectionTimer(number)
+      try { await existing.logout() } catch {}
+      try { existing.end(new Error("Starting a new pairing session")) } catch {}
+      if (clients.get(number) === existing) clients.delete(number)
+    }
     await fsp.rm(path.join(BASE, number), { recursive: true, force: true })
     const sock = await startBot(number)
     await delay(1500)
@@ -175,7 +223,7 @@ app.post(`${SECRET_PATH}/pair`, async (request, response) => {
       if (pairingCodes.get(number) === code) pairingCodes.delete(number)
     }, 120000)
     timer.unref?.()
-    console.log(`🔔 CODE ${number} -> ${code}`)
+    console.log(`🔔 Pairing code generated for ${number}; share it only with the account owner`)
   } catch (error) {
     console.error("Pair fail:", error.message)
   } finally {
@@ -190,10 +238,11 @@ app.post(`${SECRET_PATH}/delete`, async (request, response) => {
   if (!isValidNumber(number)) return response.redirect(SECRET_PATH)
 
   const sock = clients.get(number)
+  clearConnectionTimer(number)
   if (sock) {
     try { await sock.logout() } catch {}
     try { sock.end(new Error("Deleted by dashboard")) } catch {}
-    clients.delete(number)
+    if (clients.get(number) === sock) clients.delete(number)
   }
 
   await fsp.rm(path.join(BASE, number), { recursive: true, force: true }).catch(() => {})
@@ -204,6 +253,10 @@ app.post(`${SECRET_PATH}/delete`, async (request, response) => {
 
 ;(async () => {
   for (const number of await getFolders()) {
+    if (clients.size >= MAX_CONNECTED_BOTS) {
+      console.warn(`Not starting ${number}: maximum of ${MAX_CONNECTED_BOTS} bot sessions reached`)
+      continue
+    }
     try { await startBot(number) } catch (error) {
       console.error(`Could not start ${number}:`, error.message)
     }
@@ -219,6 +272,8 @@ const server = app.listen(PORT, "0.0.0.0", () => {
 
 function shutdown(signal) {
   console.log(`${signal} received; shutting down`)
+  for (const timer of connectionTimers.values()) clearTimeout(timer)
+  connectionTimers.clear()
   server.close(() => process.exit(0))
   setTimeout(() => process.exit(1), 5000).unref()
 }
