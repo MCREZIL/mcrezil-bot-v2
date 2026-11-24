@@ -376,7 +376,7 @@ package.json
 
 JSON
 {
-  "name": "mcrezil-bot",
+  "name": "mcrezil-bot-v2",
   "version": "1.0.0",
   "main": "bot.js",
   "type": "commonjs",
